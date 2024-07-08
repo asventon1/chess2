@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chess</title>
+  </head>
+  <body>
+    <img style="margin: 100px;" id="board" width=1000 height=1000 src="board.svg/0/0/0"/>
+    <p id="outcome"></p>
+    <script>
+      let bsIndex = 1;
+      function getPosition(el) {
+        var xPosition = 0;
+        var yPosition = 0;
+       
+        while (el) {
+          if (el.tagName == "BODY") {
+            // deal with browser quirks with body/window/document and page scroll
+            var xScrollPos = el.scrollLeft || document.documentElement.scrollLeft;
+            var yScrollPos = el.scrollTop || document.documentElement.scrollTop;
+       
+            xPosition += (el.offsetLeft - xScrollPos + el.clientLeft);
+            yPosition += (el.offsetTop - yScrollPos + el.clientTop);
+          } else {
+            xPosition += (el.offsetLeft - el.scrollLeft + el.clientLeft);
+            yPosition += (el.offsetTop - el.scrollTop + el.clientTop);
+          }
+       
+          el = el.offsetParent;
+        }
+        return {
+          x: xPosition,
+          y: yPosition
+        };
+      }
+      function getSquareFromClick(x, y) { // input should be between 0 and 1
+        if(x < 0.038 || x > 1 - 0.038 || y < 0.038 || y > 1 - 0.038){
+          return -1;
+        }
+        let scale = 1/(1-2*0.038)
+        x -= 0.038
+        y -= 0.038
+        x *= scale * 8
+        y *= scale * 8
+        x = Math.floor(x)
+        y = Math.floor(y)
+        return {
+          x: x,
+          y: y,
+        }
+      }
+      board = document.getElementById("board");
+      outcomeText = document.getElementById("outcome");
+      function getClickPosition(e) {
+        offset = getPosition(board);
+        xPosition = e.clientX-offset.x;
+        yPosition = e.clientY-offset.y;
+        //console.log(e.clientX-offset.x, e.clientY-offset.y);
+        boardPosition = getSquareFromClick(xPosition/board.width, yPosition/board.height);
+        console.log(boardPosition);
+        board.src = "board.svg/"+boardPosition.x+"/"+(7-boardPosition.y)+"/"+bsIndex
+        fetch("outcome")
+          .then(x => x.text())
+          .then(y => { outcomeText.innerHTML = y })
+        bsIndex++;
+      }
+      board.addEventListener("click", getClickPosition, false);
+    </script>
+  </body>
+</html>
