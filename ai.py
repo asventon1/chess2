@@ -7,28 +7,26 @@ model_global = None
 
 def create_model():
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(64*13+1, activation='relu'),
+        tf.keras.layers.Dense(64*13+1, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(64*13+1, activation='relu'),
+        tf.keras.layers.Dense(64*13+1, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(800, activation='relu'),
+        tf.keras.layers.Dense(400, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(400, activation='relu'),
+        tf.keras.layers.Dense(400, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(400, activation='relu'),
+        tf.keras.layers.Dense(200, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(200, activation='relu'),
+        tf.keras.layers.Dense(200, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(200, activation='relu'),
+        tf.keras.layers.Dense(100, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(100, activation='relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(100, activation='relu'),
+        tf.keras.layers.Dense(100, activation='leaky_relu'),
         tf.keras.layers.Dropout(0.1),
         tf.keras.layers.Dense(1)
     ])
     loss_fn = tf.keras.losses.MeanSquaredError()
-    model.compile(optimizer='adam',
+    model.compile(optimizer='SGD',
                   loss=loss_fn)
     return model
 
@@ -197,8 +195,8 @@ def load_data_from_numpy(start):
         return (boards, evals)
 
 def train_model():
-    #model = create_model()
-    model = tf.keras.models.load_model('stockfish_model2.keras')
+    model = create_model()
+    #model = tf.keras.models.load_model('stockfish_model2.keras')
     while True:
         for i in range(4):
             boards, evals = load_data_from_numpy(i*10)
