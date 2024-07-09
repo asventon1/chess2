@@ -79,34 +79,37 @@ fn board_array_from_json(j_input: Value) -> (Vec<u8>, Vec<f64>) {
 
 fn main() -> std::io::Result<()>{
     //println!("{}", array![[1,2,3]; 5]);
-    let contents = fs::read_to_string("../start_data_mil.json")
-        .expect("Should have been able to read the file");
-    let v: Value = serde_json::from_str(&contents).expect("big fail 2");
-    let (board_array, eval_array) = board_array_from_json(v);
-    //println!("{:?}", board_array);
-    //npyz::to_file_1d("array.npy", arr)?;
-    let mut out_buf = vec![];
-    let mut writer = {
-        npyz::WriteOptions::<u8>::new()
-            .default_dtype()
-            .shape(&[(board_array.len()/833).try_into().unwrap(), 833])
-            .writer(&mut out_buf)
-            .begin_nd()?
-    };
-    writer.extend(board_array)?;
-    writer.finish()?;
-    let mut out_buf2 = vec![];
-    let mut writer2 = {
-        npyz::WriteOptions::<f64>::new()
-            .default_dtype()
-            .shape(&[eval_array.len().try_into().unwrap()])
-            .writer(&mut out_buf2)
-            .begin_nd()?
-    };
-    writer2.extend(eval_array)?;
-    writer2.finish()?;
     let mut file = fs::File::create("array.npy")?;
-    file.write_all(&out_buf)?;
-    file.write_all(&out_buf2)?;
+    for data_file_index in 0..41 {
+        println!("Current file {}", data_file_index);
+        let contents = fs::read_to_string(format!("../data/data{}.json", data_file_index))
+            .expect("Should have been able to read the file");
+        let v: Value = serde_json::from_str(&contents).expect("big fail 2");
+        let (board_array, eval_array) = board_array_from_json(v);
+        //println!("{:?}", board_array);
+        //npyz::to_file_1d("array.npy", arr)?;
+        let mut out_buf = vec![];
+        let mut writer = {
+            npyz::WriteOptions::<u8>::new()
+                .default_dtype()
+                .shape(&[(board_array.len()/833).try_into().unwrap(), 833])
+                .writer(&mut out_buf)
+                .begin_nd()?
+        };
+        writer.extend(board_array)?;
+        writer.finish()?;
+        let mut out_buf2 = vec![];
+        let mut writer2 = {
+            npyz::WriteOptions::<f64>::new()
+                .default_dtype()
+                .shape(&[eval_array.len().try_into().unwrap()])
+                .writer(&mut out_buf2)
+                .begin_nd()?
+        };
+        writer2.extend(eval_array)?;
+        writer2.finish()?;
+        file.write_all(&out_buf)?;
+        file.write_all(&out_buf2)?;
+    }
     Ok(())
 }

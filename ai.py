@@ -7,20 +7,30 @@ model_global = None
 
 def create_model():
     model = tf.keras.models.Sequential([
-      tf.keras.layers.Dense(64*13+1, activation='relu'),
-      tf.keras.layers.Dropout(0.2),
-      tf.keras.layers.Dense(400, activation='relu'),
-      tf.keras.layers.Dropout(0.2),
-      tf.keras.layers.Dense(400, activation='relu'),
-      tf.keras.layers.Dropout(0.2),
-      tf.keras.layers.Dense(200, activation='relu'),
-      tf.keras.layers.Dropout(0.2),
-      tf.keras.layers.Dense(1)
+        tf.keras.layers.Dense(64*13+1, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(64*13+1, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(800, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(400, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(400, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(200, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(200, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(100, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(100, activation='relu'),
+        tf.keras.layers.Dropout(0.1),
+        tf.keras.layers.Dense(1)
     ])
     loss_fn = tf.keras.losses.MeanSquaredError()
     model.compile(optimizer='adam',
                   loss=loss_fn)
-    return (model, loss_fn)
+    return model
 
 def adjusted_sigmoid(x):
     return 1/(1+math.exp(-x/300))
@@ -172,29 +182,40 @@ def save_data_as_numpy():
         np.save(of, evals)
     #board_fen = fen_from_board_array(boards[2])
 
-def load_data_from_numpy():
+def load_data_from_numpy(start):
     with open('rust/array.npy', 'rb') as of:
+        for i in range(start):
+            new_boards = np.load(of)
+            new_evals = np.load(of)
         boards = np.load(of)
         evals = np.load(of)
-    return (boards, evals)
+        for i in range(9):
+            new_boards = np.load(of)
+            new_evals = np.load(of)
+            boards = np.concatenate((boards, new_boards), axis=0)
+            evals = np.concatenate((evals, new_evals), axis=0)
+        return (boards, evals)
 
 def train_model():
-    boards, evals = load_data_from_numpy()
-    boards_train = boards[:int(len(boards)/4*3)]
-    evals_train = evals[:int(len(evals)/4*3)]
-    boards_test = boards[int(len(boards)/4*3):]
-    evals_test = evals[int(len(evals)/4*3):]
-    (model, loss_fn) = create_model()
-    #model = tf.keras.models.load_model('stockfish_model.keras')
+    #model = create_model()
+    model = tf.keras.models.load_model('stockfish_model2.keras')
+    while True:
+        for i in range(4):
+            boards, evals = load_data_from_numpy(i*10)
+            test_train_split = 5.0/6.0
+            boards_train = boards[:int(len(boards)*test_train_split)]
+            evals_train = evals[:int(len(evals)*test_train_split)]
+            boards_test = boards[int(len(boards)*test_train_split):]
+            evals_test = evals[int(len(evals)*test_train_split):]
+            loss_fn = tf.keras.losses.MeanSquaredError()
 
-    print(boards_train.shape, boards_test.shape)
-    print(int(len(boards)/4*3))
-    print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
-    model.fit(boards_train, evals_train, epochs=5)
-    print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
-    print(tf.keras.ops.average(loss_fn.call(evals_train, model(boards_train))))
-    #print(model(boards).numpy())
-    model.save("stockfish_model2.keras")
+            print(boards_train.shape, boards_test.shape)
+            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+            model.fit(boards_train, evals_train, epochs=1)
+            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+            #print(tf.keras.ops.average(loss_fn.call(evals_train, model(boards_train))))
+            #print(model(boards).numpy())
+            model.save("stockfish_model2.keras")
 
 def load_model():
     global model_global
