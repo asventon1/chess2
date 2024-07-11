@@ -49,6 +49,23 @@ def pick_move(board):
         board.pop()
     return best_move
 
+def pick_move_minimax(board, depth, color):
+    if(len(list(board.legal_moves)) == 0 or depth == 0):
+        board_array = ai.board_array_from_fen(board.fen())
+        return (color * ai.use_model(board_array), None)
+        #return (1, None)
+    best_score = -1000000
+    best_move = None
+    for m in board.legal_moves: 
+        board.push(m)
+        (score, move) = pick_move_minimax(board, depth-1, -color)
+        score = -score
+        if(score > best_score):
+            best_score = score
+            best_move = m
+        board.pop()
+    return (best_score, best_move)
+
 @app.route('/board.svg/<xPos>/<yPos>/<bs>')
 def boardRoute(xPos, yPos, bs):
     global board
@@ -57,10 +74,12 @@ def boardRoute(xPos, yPos, bs):
     square = chess.square(int(xPos), int(yPos)) 
     #print(square, moves)
     if(square in moves):
-        board.push(chess.Move(currentSquare, square))
+        board.push(board.find_move(currentSquare, square))
         moves = []
-        best_move = pick_move(board)
-        board.push(best_move)
+        #best_move = pick_move(board)
+        (best_score, best_move) = pick_move_minimax(board, 3, -1)
+        if(best_move != None):
+            board.push(best_move)
     else:
         moves = [x.to_square for x in board.legal_moves if x.from_square == square]
     currentSquare = square

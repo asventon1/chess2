@@ -1,32 +1,57 @@
-import tensorflow as tf
+#import tensorflow as tf
+import time
 import json
 import numpy as np
 import math
+import torch
+from torch import nn
+from torch.utils.data import TensorDataset, DataLoader
 
 model_global = None
 
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+print(f"Using {device} device")
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(64*13+1, 400),
+            nn.ReLU(),
+            nn.Linear(400, 200),
+            nn.ReLU(),
+            nn.Linear(200, 100),
+            nn.ReLU(),
+            nn.Linear(100, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        logits = self.linear_relu_stack(x)
+        return logits
+
 def create_model():
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(64*13+1, activation='leaky_relu'),
+        tf.keras.layers.Dense(64*13+1, activation='sigmoid'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(64*13+1, activation='leaky_relu'),
+        tf.keras.layers.Dense(400, activation='sigmoid'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(400, activation='leaky_relu'),
+        tf.keras.layers.Dense(200, activation='sigmoid'),
         tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(400, activation='leaky_relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(200, activation='leaky_relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(200, activation='leaky_relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(100, activation='leaky_relu'),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(100, activation='leaky_relu'),
+        tf.keras.layers.Dense(100, activation='sigmoid'),
         tf.keras.layers.Dropout(0.1),
         tf.keras.layers.Dense(1)
     ])
     loss_fn = tf.keras.losses.MeanSquaredError()
-    model.compile(optimizer='SGD',
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=0.01, decay_steps=20000, decay_rate=0.99)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule) 
+    model.compile(optimizer="Adam",
                   loss=loss_fn)
     return model
 
@@ -187,41 +212,116 @@ def load_data_from_numpy(start):
             new_evals = np.load(of)
         boards = np.load(of)
         evals = np.load(of)
-        for i in range(9):
+        for i in range(4):
             new_boards = np.load(of)
             new_evals = np.load(of)
             boards = np.concatenate((boards, new_boards), axis=0)
             evals = np.concatenate((evals, new_evals), axis=0)
         return (boards, evals)
 
+def train(log_interval, model, device, train_loader, optimizer, epoch):
+    model.train()
+    average_loss = 0
+    last_time = time.time()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+        loss_fn = nn.MSELoss()
+        loss = loss_fn(output, target)
+        loss.backward()
+        optimizer.step()
+        average_loss += loss.item() / log_interval
+        if batch_idx % log_interval == 0:
+            current_time = time.time()
+            elapsed_time = current_time - last_time
+            last_time = current_time
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.2f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                100. * batch_idx / len(train_loader), average_loss, elapsed_time))
+            average_loss = 0
+
+
+def test(model, device, test_loader):
+    model.eval()
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            loss_fn = nn.MSELoss(reduction='sum')
+            test_loss += loss_fn(output, target).item()  # sum up batch loss
+            #pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            #correct += pred.eq(target.view_as(pred)).sum().item()
+
+    test_loss /= len(test_loader.dataset)
+
+    print('\nTest set: Average loss: {:.4f}\n'.format(
+        test_loss))
+
 def train_model():
-    model = create_model()
+    #model = create_model()
+    #loss_fn = tf.keras.losses.MeanSquaredError()
     #model = tf.keras.models.load_model('stockfish_model2.keras')
+    #print(model.optimizer.learning_rate)
+    #lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=0.002, decay_steps=100000, decay_rate=0.99)
+    #optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule) 
+    #model.compile(optimizer=optimizer, loss=loss_fn)
+    
+    epoch = 0
+
+    #model = Model().to(device)
+    model = torch.jit.load("stockfish_model.pt").to(device)
+    model.eval()            
+    optimizer = torch.optim.Adam(model.parameters())
     while True:
-        for i in range(4):
-            boards, evals = load_data_from_numpy(i*10)
-            test_train_split = 5.0/6.0
-            boards_train = boards[:int(len(boards)*test_train_split)]
-            evals_train = evals[:int(len(evals)*test_train_split)]
-            boards_test = boards[int(len(boards)*test_train_split):]
-            evals_test = evals[int(len(evals)*test_train_split):]
-            loss_fn = tf.keras.losses.MeanSquaredError()
+        for i in range(8):
+            epoch += 1
+            boards, evals = load_data_from_numpy(i*5)
+            test_train_split = 49/50
+            boards_train = torch.Tensor(boards[:int(len(boards)*test_train_split)])
+            evals_train = torch.Tensor(evals.reshape((len(evals),1))[:int(len(evals)*test_train_split)])
+            boards_test = torch.Tensor(boards[int(len(boards)*test_train_split):])
+            evals_test = torch.Tensor(evals.reshape((len(evals),1))[int(len(evals)*test_train_split):])
 
             print(boards_train.shape, boards_test.shape)
-            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
-            model.fit(boards_train, evals_train, epochs=1)
-            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+
+            train_dataset = TensorDataset(boards_train, evals_train)
+            test_dataset = TensorDataset(boards_test, evals_test)
+            train_kwargs = {'batch_size': 64}
+            test_kwargs = {'batch_size': 64}
+            train_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
+            test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
+
+
+            test(model, device, test_loader) 
+            train(10000, model, device, train_loader, optimizer, epoch)
+            test(model, device, test_loader) 
+
+            #torch.save(model, "stockfish_model.pt")
+            torch.jit.script(model).save("stockfish_model.pt")
+
+            '''
+            with tf.device('/CPU:0'):
+                print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+            model.fit(boards_test, evals_test, epochs=1, batch_size=1)
+            with tf.device('/CPU:0'):
+                print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
             #print(tf.keras.ops.average(loss_fn.call(evals_train, model(boards_train))))
             #print(model(boards).numpy())
             model.save("stockfish_model2.keras")
+            '''
 
 def load_model():
     global model_global
-    model_global = tf.keras.models.load_model('stockfish_model2.keras')
+    #model_global = tf.keras.models.load_model('stockfish_model2.keras')
+    model_global = torch.jit.load("stockfish_model.pt").to(device)
+    model_global.eval()
 
 def use_model(input_board):
     global model_global
-    return model_global(np.array([input_board]))
+    return model_global(torch.Tensor([input_board]).to(device))
 
 
 if __name__ == "__main__":
