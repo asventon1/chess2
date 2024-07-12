@@ -22,12 +22,15 @@ class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(64*13+1, 400),
-            nn.ReLU(),
-            nn.Linear(400, 200),
-            nn.ReLU(),
-            nn.Linear(200, 100),
-            nn.ReLU(),
+            nn.Linear(64*13+1, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(800, 400), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(400, 200), nn.Sigmoid(), nn.Dropout(p=0.1),
+            nn.Linear(200, 100), nn.Sigmoid(), nn.Dropout(p=0.1),
             nn.Linear(100, 1),
             nn.Sigmoid(),
         )
@@ -274,54 +277,61 @@ def train_model():
     #model = Model().to(device)
     model = torch.jit.load("stockfish_model.pt").to(device)
     model.eval()            
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    with open("current_dataset.txt", "r") as f:
+        current_dataset = int(f.read())
     while True:
-        for i in range(8):
-            epoch += 1
-            boards, evals = load_data_from_numpy(i*5)
-            test_train_split = 49/50
-            boards_train = torch.Tensor(boards[:int(len(boards)*test_train_split)])
-            evals_train = torch.Tensor(evals.reshape((len(evals),1))[:int(len(evals)*test_train_split)])
-            boards_test = torch.Tensor(boards[int(len(boards)*test_train_split):])
-            evals_test = torch.Tensor(evals.reshape((len(evals),1))[int(len(evals)*test_train_split):])
+        epoch += 1
+        boards, evals = load_data_from_numpy(current_dataset*5)
+        test_train_split = 49/50
+        boards_train = torch.Tensor(boards[:int(len(boards)*test_train_split)])
+        evals_train = torch.Tensor(evals.reshape((len(evals),1))[:int(len(evals)*test_train_split)])
+        boards_test = torch.Tensor(boards[int(len(boards)*test_train_split):])
+        evals_test = torch.Tensor(evals.reshape((len(evals),1))[int(len(evals)*test_train_split):])
 
-            print(boards_train.shape, boards_test.shape)
+        print(boards_train.shape, boards_test.shape)
 
-            train_dataset = TensorDataset(boards_train, evals_train)
-            test_dataset = TensorDataset(boards_test, evals_test)
-            train_kwargs = {'batch_size': 64}
-            test_kwargs = {'batch_size': 64}
-            train_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
-            test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
+        train_dataset = TensorDataset(boards_train, evals_train)
+        test_dataset = TensorDataset(boards_test, evals_test)
+        train_kwargs = {'batch_size': 64}
+        test_kwargs = {'batch_size': 64}
+        train_loader = torch.utils.data.DataLoader(train_dataset,**train_kwargs)
+        test_loader = torch.utils.data.DataLoader(test_dataset, **test_kwargs)
 
 
-            test(model, device, test_loader) 
-            train(10000, model, device, train_loader, optimizer, epoch)
-            test(model, device, test_loader) 
+        test(model, device, test_loader) 
+        train(10000, model, device, train_loader, optimizer, epoch)
+        test(model, device, test_loader) 
 
-            #torch.save(model, "stockfish_model.pt")
-            torch.jit.script(model).save("stockfish_model.pt")
+        #torch.save(model, "stockfish_model.pt")
+        torch.jit.script(model).save("stockfish_model.pt")
 
-            '''
-            with tf.device('/CPU:0'):
-                print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
-            model.fit(boards_test, evals_test, epochs=1, batch_size=1)
-            with tf.device('/CPU:0'):
-                print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
-            #print(tf.keras.ops.average(loss_fn.call(evals_train, model(boards_train))))
-            #print(model(boards).numpy())
-            model.save("stockfish_model2.keras")
-            '''
+        current_dataset += 1
+        if(current_dataset >= 8):
+            current_dataset = 0
+        with open("current_dataset.txt", "w") as f:
+            f.write(str(current_dataset))
+
+        '''
+        with tf.device('/CPU:0'):
+            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+        model.fit(boards_test, evals_test, epochs=1, batch_size=1)
+        with tf.device('/CPU:0'):
+            print(tf.keras.ops.average(loss_fn.call(evals_test, model(boards_test))))
+        #print(tf.keras.ops.average(loss_fn.call(evals_train, model(boards_train))))
+        #print(model(boards).numpy())
+        model.save("stockfish_model2.keras")
+        '''
 
 def load_model():
     global model_global
     #model_global = tf.keras.models.load_model('stockfish_model2.keras')
-    model_global = torch.jit.load("stockfish_model.pt").to(device)
+    model_global = torch.jit.load("stockfish_model2.pt").to(device)
     model_global.eval()
 
 def use_model(input_board):
     global model_global
-    return model_global(torch.Tensor([input_board]).to(device))
+    return model_global(torch.Tensor(np.array([input_board])).to(device))
 
 
 if __name__ == "__main__":
