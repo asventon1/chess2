@@ -200,6 +200,10 @@ def pick_move_minimax_table(board, depth, alpha, beta, color):
     ttTable[fen] = entry
     return (best_score, best_move)
 
+def pick_move_network(board):
+    board_array = ai.board_array_from_fen(board.fen())
+
+
 depth = 3
 @app.route('/board.svg/<xPos>/<yPos>/<bs>')
 def boardRoute(xPos, yPos, bs):
@@ -217,13 +221,13 @@ def boardRoute(xPos, yPos, bs):
         #(best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
         time2 = time.time()
         #print("old version {}".format(time2-time1))
-        depth = 1
+        depth=1
         (best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
         time3 = time.time()
         print("new version {}".format(time3-time2))
-        if(time3-time2 > 10):
+        if(time3-time2 > 1):
             depth -= 1
-        elif(time3-time2 < 1):
+        elif(time3-time2 < 0.1):
             depth += 1
         if(best_move != None):
             board.push(best_move)

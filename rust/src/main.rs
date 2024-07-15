@@ -3,6 +3,12 @@ use serde_json::Value;
 use npyz::WriterBuilder;
 use std::io::Write;
 
+#[derive(Copy, Clone)]
+enum DataType {
+    Evals,
+    Moves,
+}
+
 fn adjusted_sigmoid(x: f64) -> f64{
     1.0/(1.0+(-x/300.0).exp())
 }
@@ -40,7 +46,7 @@ fn board_array_from_fen(fen_input: &str) -> Vec<u8> {
     return current_board;
 }
 
-fn board_array_from_json(j_input: Value) -> (Vec<u8>, Vec<f64>) {
+fn board_array_from_json(j_input: Value, data_type: DataType) -> (Vec<u8>, Vec<f64>) {
     let mut eval_array: Vec<f64> = Vec::new();
     let mut board_array: Vec<u8> = Vec::new();
     let j: Vec<Value> = match j_input {
@@ -56,16 +62,35 @@ fn board_array_from_json(j_input: Value) -> (Vec<u8>, Vec<f64>) {
             Value::Object(eval_object) => { eval_object },
             _ => panic!("invalid json input, 2"),
         };
-        let current_eval = if eval.contains_key("cp") {
-            let eval_cp = match &eval["cp"] {
-                Value::Number(eval_cp) => { eval_cp },
-                _ => panic!("invalid json input, 3"),
-            };
-            adjusted_sigmoid(eval_cp.as_f64().expect("invalid json input, 3"))
-        } else {
-            continue
-        };
-        eval_array.push(current_eval);
+        match data_type { 
+            DataType::Evals => {
+                let current_eval = if eval.contains_key("cp") {
+                    let eval_cp = match &eval["cp"] {
+                        Value::Number(eval_cp) => { eval_cp },
+                        _ => panic!("invalid json input, 3"),
+                    };
+                    adjusted_sigmoid(eval_cp.as_f64().expect("invalid json input, 3"))
+                } else {
+                    continue
+                };
+                eval_array.push(current_eval);
+            } 
+            DataType::Moves => {
+                match &eval["line"] {
+                    Value::String(line_string) => {
+                        let mut line_chars = line_string.chars();
+                        for _ in 0..2 {
+                            let x: usize = line_chars.next().unwrap() as usize - 97;
+                            let y: usize = line_chars.next().unwrap() as usize - 49;
+                            let mut new_move = vec![0.0; 64];
+                            new_move[y*8+x] = 1.0;
+                            eval_array.extend(new_move);
+                        }
+                    },
+                    _ => panic!("invalid json input, 3"),
+                };
+            }
+        }
 
         let fen = match &j[i]["fen"] {
             Value::String(fen) => { fen },
@@ -77,7 +102,7 @@ fn board_array_from_json(j_input: Value) -> (Vec<u8>, Vec<f64>) {
     return (board_array, eval_array);
 }
 
-fn main() -> std::io::Result<()>{
+fn make_eval_dataset(data_type: DataType) -> std::io::Result<()>{
     //println!("{}", array![[1,2,3]; 5]);
     let mut file = fs::File::create("array.npy")?;
     for data_file_index in 0..41 {
@@ -85,7 +110,7 @@ fn main() -> std::io::Result<()>{
         let contents = fs::read_to_string(format!("../data/data{}.json", data_file_index))
             .expect("Should have been able to read the file");
         let v: Value = serde_json::from_str(&contents).expect("big fail 2");
-        let (board_array, eval_array) = board_array_from_json(v);
+        let (board_array, eval_array) = board_array_from_json(v, data_type);
         //println!("{:?}", board_array);
         //npyz::to_file_1d("array.npy", arr)?;
         let mut out_buf = vec![];
@@ -99,17 +124,31 @@ fn main() -> std::io::Result<()>{
         writer.extend(board_array)?;
         writer.finish()?;
         let mut out_buf2 = vec![];
-        let mut writer2 = {
-            npyz::WriteOptions::<f64>::new()
-                .default_dtype()
-                .shape(&[eval_array.len().try_into().unwrap()])
-                .writer(&mut out_buf2)
-                .begin_nd()?
+        let mut writer2 = match data_type {
+            DataType::Evals => {
+                npyz::WriteOptions::<f64>::new()
+                    .default_dtype()
+                    .shape(&[eval_array.len().try_into().unwrap()])
+                    .writer(&mut out_buf2)
+                    .begin_nd()?
+            }
+            DataType::Moves => {
+                npyz::WriteOptions::<f64>::new()
+                    .default_dtype()
+                    .shape(&[(eval_array.len()/(64*2)).try_into().unwrap(), 2, 64])
+                    .writer(&mut out_buf2)
+                    .begin_nd()?
+            }
         };
         writer2.extend(eval_array)?;
         writer2.finish()?;
         file.write_all(&out_buf)?;
         file.write_all(&out_buf2)?;
     }
+    Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+    make_eval_dataset(DataType::Moves)?;
     Ok(())
 }

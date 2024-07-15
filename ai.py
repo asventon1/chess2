@@ -18,26 +18,79 @@ device = (
 )
 print(f"Using {device} device")
 
-class Model(nn.Module):
+
+class MoveModel1(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(64*13+1, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 800), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(800, 400), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(400, 200), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(200, 100), nn.Sigmoid(), nn.Dropout(p=0.1),
-            nn.Linear(100, 1),
-            nn.Sigmoid(),
+            nn.Linear(64*13+1, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 400), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(400, 200), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(200, 100), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(100, 64),
+            nn.Softmax(dim=1),
         )
 
     def forward(self, x):
         logits = self.linear_relu_stack(x)
         return logits
+
+class MoveModel2(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(64*13+1+64, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 800), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(800, 400), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(400, 200), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(200, 100), nn.LeakyReLU(), #nn.Dropout(p=0.1),
+            nn.Linear(100, 64),
+            nn.Softmax(dim=1),
+        )
+
+    def forward(self, x):
+        logits = self.linear_relu_stack(x)
+        return logits
+
+class Model(nn.Module):
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            #torch.nn.init.xavier_uniform_(m.weight)
+            m.weight.data.fill_(1)
+            m.bias.data.fill_(0)
+
+    def __init__(self):
+        super().__init__()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(64*13+1, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
+            nn.Linear(800, 800), nn.LeakyReLU(), nn.Dropout(p=0.1),  nn.BatchNorm1d(800),
+            nn.Linear(800, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
+            nn.Linear(400, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
+            nn.Linear(400, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
+            nn.Linear(200, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
+            nn.Linear(200, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
+            nn.Linear(100, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
+            nn.Linear(100, 1),
+            nn.Sigmoid(),
+        )
+        self.linear_relu_stack2 = nn.Sequential(
+        )
+
+        #self.linear_relu_stack.apply(self.init_weights)
+        #self.linear_relu_stack2.apply(self.init_weights)
+
+    def forward(self, x):
+        logits = self.linear_relu_stack(x)
+        #print(logits)
+        #logits = self.linear_relu_stack2(logits)
+        return logits
+
 
 def create_model():
     model = tf.keras.models.Sequential([
@@ -209,7 +262,7 @@ def save_data_as_numpy():
     #board_fen = fen_from_board_array(boards[2])
 
 def load_data_from_numpy(start):
-    with open('rust/array.npy', 'rb') as of:
+    with open('rust/array2.npy', 'rb') as of:
         for i in range(start):
             new_boards = np.load(of)
             new_evals = np.load(of)
@@ -230,9 +283,11 @@ def train(log_interval, model, device, train_loader, optimizer, epoch):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
+        #loss_fn = nn.CrossEntropyLoss()
         loss_fn = nn.MSELoss()
         loss = loss_fn(output, target)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         average_loss += loss.item() / log_interval
         if batch_idx % log_interval == 0:
@@ -253,6 +308,7 @@ def test(model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
+            loss_fn = nn.CrossEntropyLoss(reduction='sum')
             loss_fn = nn.MSELoss(reduction='sum')
             test_loss += loss_fn(output, target).item()  # sum up batch loss
             #pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
@@ -262,6 +318,63 @@ def test(model, device, test_loader):
 
     print('\nTest set: Average loss: {:.4f}\n'.format(
         test_loss))
+
+def train_move_model():  
+    epoch = 0
+
+    model1 = MoveModel1().to(device)
+    model2 = MoveModel2().to(device)
+    #model = torch.jit.load("stockfish_model.pt").to(device)
+    #model.eval()            
+    optimizer1 = torch.optim.Adam(model1.parameters(), lr=0.001)
+    optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001)
+    with open("current_dataset.txt", "r") as f:
+        current_dataset = int(f.read())
+    while True:
+        epoch += 1
+        boards, evals = load_data_from_numpy(current_dataset)
+        evals = np.transpose(evals, axes=(1,0,2))
+        boards_evals = np.column_stack((boards, evals[0]))
+        print(evals.shape)
+        print(boards_evals.shape)
+        test_train_split = 4/5
+        boards_train = torch.Tensor(boards[:int(len(boards)*test_train_split)]) 
+        boards_evals_train = torch.Tensor(boards_evals[:int(len(boards_evals)*test_train_split)]) 
+        evals1_train = torch.Tensor(evals[0][:int(len(evals[0])*test_train_split)])
+        evals2_train = torch.Tensor(evals[1][:int(len(evals[1])*test_train_split)])
+        boards_test = torch.Tensor(boards[int(len(boards)*test_train_split):])
+        evals1_test = torch.Tensor(evals[0][int(len(evals[0])*test_train_split):])
+        evals2_test = torch.Tensor(evals[1][int(len(evals[1])*test_train_split):])
+        boards_evals_test = torch.Tensor(boards_evals[int(len(boards_evals)*test_train_split):]) 
+
+        print(boards_train.shape, boards_test.shape)
+
+        train1_dataset = TensorDataset(boards_train, evals1_train)
+        test1_dataset = TensorDataset(boards_test, evals1_test)
+        train2_dataset = TensorDataset(boards_evals_train, evals2_train)
+        test2_dataset = TensorDataset(boards_evals_test, evals2_test)
+        train_kwargs = {'batch_size': 64}
+        test_kwargs = {'batch_size': 64}
+        train1_loader = torch.utils.data.DataLoader(train1_dataset,**train_kwargs)
+        test1_loader = torch.utils.data.DataLoader(test1_dataset, **test_kwargs)
+        train2_loader = torch.utils.data.DataLoader(train2_dataset,**train_kwargs)
+        test2_loader = torch.utils.data.DataLoader(test2_dataset, **test_kwargs)
+
+
+        train(10000, model1, device, train1_loader, optimizer1, epoch)
+        train(10000, model2, device, train2_loader, optimizer2, epoch)
+        test(model1, device, test1_loader) 
+        test(model2, device, test2_loader) 
+
+        #torch.save(model, "stockfish_model.pt")
+        torch.jit.script(model1).save("stockfish_move_model1.pt")
+        torch.jit.script(model2).save("stockfish_move_model2.pt")
+
+        current_dataset += 1
+        if(current_dataset >= 40):
+            current_dataset = 0
+        with open("current_dataset.txt", "w") as f:
+            f.write(str(current_dataset))
 
 def train_model():
     #model = create_model()
@@ -274,9 +387,10 @@ def train_model():
     
     epoch = 0
 
-    #model = Model().to(device)
-    model = torch.jit.load("stockfish_model.pt").to(device)
-    model.eval()            
+    model = Model().to(device)
+    #model = torch.jit.load("stockfish_model.pt").to(device)
+    #model.eval()            
+    #model.forward = model2.forward
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     with open("current_dataset.txt", "r") as f:
         current_dataset = int(f.read())
