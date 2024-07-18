@@ -69,12 +69,20 @@ class Model(nn.Module):
         super().__init__()
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(64*13+1, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
-            nn.Linear(800, 800), nn.LeakyReLU(), nn.Dropout(p=0.1),  nn.BatchNorm1d(800),
+            nn.Linear(800, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
+            nn.Linear(800, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
+            nn.Linear(800, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
             nn.Linear(800, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
+            nn.Linear(400, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
+            nn.Linear(400, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
             nn.Linear(400, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
             nn.Linear(400, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
             nn.Linear(200, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
+            nn.Linear(200, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
+            nn.Linear(200, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
             nn.Linear(200, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
+            nn.Linear(100, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
+            nn.Linear(100, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
             nn.Linear(100, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
             nn.Linear(100, 1),
             nn.Sigmoid(),
@@ -268,7 +276,7 @@ def load_data_from_numpy(start):
             new_evals = np.load(of)
         boards = np.load(of)
         evals = np.load(of)
-        for i in range(4):
+        for i in range(1):
             new_boards = np.load(of)
             new_evals = np.load(of)
             boards = np.concatenate((boards, new_boards), axis=0)
@@ -287,7 +295,7 @@ def train(log_interval, model, device, train_loader, optimizer, epoch):
         loss_fn = nn.MSELoss()
         loss = loss_fn(output, target)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
         optimizer.step()
         average_loss += loss.item() / log_interval
         if batch_idx % log_interval == 0:
@@ -318,6 +326,7 @@ def test(model, device, test_loader):
 
     print('\nTest set: Average loss: {:.4f}\n'.format(
         test_loss))
+    return test_loss
 
 def train_move_model():  
     epoch = 0
@@ -387,16 +396,18 @@ def train_model():
     
     epoch = 0
 
-    model = Model().to(device)
-    #model = torch.jit.load("stockfish_model.pt").to(device)
-    #model.eval()            
+    #model = Model().to(device)
+    model = torch.jit.load("stockfish_model.pt").to(device)
+    model.eval()            
     #model.forward = model2.forward
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.00000001)
     with open("current_dataset.txt", "r") as f:
         current_dataset = int(f.read())
+
+    test_loss = -100000
     while True:
         epoch += 1
-        boards, evals = load_data_from_numpy(current_dataset*5)
+        boards, evals = load_data_from_numpy(current_dataset*2)
         test_train_split = 49/50
         boards_train = torch.Tensor(boards[:int(len(boards)*test_train_split)])
         evals_train = torch.Tensor(evals.reshape((len(evals),1))[:int(len(evals)*test_train_split)])
@@ -415,13 +426,18 @@ def train_model():
 
         test(model, device, test_loader) 
         train(10000, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader) 
+        test_loss += test(model, device, test_loader) 
 
         #torch.save(model, "stockfish_model.pt")
         torch.jit.script(model).save("stockfish_model.pt")
 
         current_dataset += 1
-        if(current_dataset >= 8):
+        if(current_dataset >= 20):
+            print("wqpgohqwpoghqwpogihqrpogihqrpgoihqerpogihqrpogih" + str(test_loss))
+            if test_loss > 0:
+                with open("test_loss.txt", "a") as f:
+                    f.write(str(test_loss/20) + "\n")
+            test_loss = 0
             current_dataset = 0
         with open("current_dataset.txt", "w") as f:
             f.write(str(current_dataset))
@@ -440,7 +456,7 @@ def train_model():
 def load_model():
     global model_global
     #model_global = tf.keras.models.load_model('stockfish_model2.keras')
-    model_global = torch.jit.load("stockfish_model2.pt").to(device)
+    model_global = torch.jit.load("stockfish_model.pt").to(device)
     model_global.eval()
 
 def use_model(input_board):
