@@ -57,6 +57,29 @@ class MoveModel2(nn.Module):
         logits = self.linear_relu_stack(x)
         return logits
 
+class ModelSmall(nn.Module):
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            #torch.nn.init.xavier_uniform_(m.weight)
+            m.weight.data.fill_(1)
+            m.bias.data.fill_(0)
+
+    def __init__(self):
+        super().__init__()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(64*13+1, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
+            nn.Linear(800, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
+            nn.Linear(400, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
+            nn.Linear(200, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
+            nn.Linear(100, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        logits = self.linear_relu_stack(x)
+        return logits
+
 class Model(nn.Module):
 
     def init_weights(self, m):
@@ -295,7 +318,7 @@ def train(log_interval, model, device, train_loader, optimizer, epoch):
         loss_fn = nn.MSELoss()
         loss = loss_fn(output, target)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.001)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
         optimizer.step()
         average_loss += loss.item() / log_interval
         if batch_idx % log_interval == 0:
@@ -467,5 +490,3 @@ def use_model(input_board):
 if __name__ == "__main__":
     #save_data_as_numpy()
     train_model()
-else:
-    load_model()

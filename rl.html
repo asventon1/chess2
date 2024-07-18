@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chess</title>
+  </head>
+  <body>
+    <img style="margin: 100px;" id="board" width=1000 height=1000 src="board.svg/0" onload="move()"/>
+    <p id="outcome"></p>
+    <script>
+      let bsIndex = 1;
+      board = document.getElementById("board");
+      function move() { 
+        board.src = "board.svg/"+bsIndex
+        bsIndex++;
+      }
+      move();
+    </script>
+  </body>
+</html>
