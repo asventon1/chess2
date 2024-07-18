@@ -149,6 +149,6 @@ fn make_eval_dataset(data_type: DataType) -> std::io::Result<()>{
 }
 
 fn main() -> std::io::Result<()> {
-    make_eval_dataset(DataType::Moves)?;
+    make_eval_dataset(DataType::Evals)?;
     Ok(())
 }
