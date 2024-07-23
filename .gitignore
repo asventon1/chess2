@@ -6,3 +6,8 @@ rust/target
 *.json
 *.jsonl
 *.keras
+cpp/build
+cpp/cpp_part.cpython-312-x86_64-linux-gnu.so
+cpp/cpp_part.egg-info
+cpp/chess-library
+cpp/torch_test/build

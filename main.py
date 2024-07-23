@@ -13,7 +13,7 @@ app = Flask(__name__)
 board = chess.Board()
 currentSquare = chess.A1
 moves = []
-#ai.load_model()
+ai.load_model()
 
 
 @app.route('/')
@@ -61,8 +61,9 @@ def boardRoute(xPos, yPos, bs):
         #(best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
         time2 = time.time()
         #print("old version {}".format(time2-time1))
-        #(best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
-        best_move = pick_move_first(board)
+        depth = 4
+        (best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
+        #best_move = pick_move_first(board)
         time3 = time.time()
         print("new version {}".format(time3-time2))
         if(time3-time2 > 3):

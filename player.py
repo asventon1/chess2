@@ -18,12 +18,54 @@ def pick_move_rl(board):
     for m in moves: 
         board.push(m)
         board_array = ai.board_array_from_fen(board.fen())
-        score = ai.use_model(board_array) + random.random()/10
         boards.append(board_array)
-        evals.append(score.item())
+        score = ai.use_model(board_array).item() + random.random()/100
+        outcome = board.outcome()
+        if outcome != None: 
+            winner = outcome.winner
+            termination = outcome.termination
+            if termination == chess.Termination.CHECKMATE:
+                if winner == chess.WHITE:
+                    score = 1
+                else:
+                    score = 0
+            else:
+                score = 0.5
+        evals.append(score)
         board.pop()
-    best_move = random.choices(moves, weights=torch.nn.functional.relu(torch.Tensor(evals)))
-    return (best_move[0], torch.Tensor(boards), torch.Tensor(evals))
+    #best_move = random.choices(moves, weights=torch.nn.functional.relu(torch.Tensor(evals)))
+    if(board.turn == chess.WHITE):
+        best_move = moves[torch.argmax(torch.Tensor(evals))]
+    else:
+        best_move = moves[torch.argmin(torch.Tensor(evals))]
+
+    return (best_move, torch.Tensor(boards), torch.Tensor(evals))
+
+def pick_move_model(board, model):
+    best_score = 10000 if board.turn == chess.BLACK else -10000
+    best_move = None
+    for m in board.legal_moves: 
+        board.push(m)
+        board_array = ai.board_array_from_fen(board.fen())
+        outcome = board.outcome()
+        score = 0
+        if outcome != None: 
+            winner = outcome.winner
+            termination = outcome.termination
+            if termination == chess.Termination.CHECKMATE:
+                if winner == chess.WHITE:
+                    score = 1000
+                else:
+                    score = -1000
+            else:
+                score = 0.5
+        else:
+            score = model(torch.Tensor(np.array([board_array])).to(ai.device))
+        board.pop()
+        if((score < best_score and board.turn == chess.BLACK) or (score > best_score and board.turn == chess.WHITE)):
+            best_score = score
+            best_move = m
+    return best_move
 
 def pick_move(board):
     best_score = 100

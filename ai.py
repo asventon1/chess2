@@ -68,11 +68,9 @@ class ModelSmall(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(64*13+1, 800), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(800),
-            nn.Linear(800, 400), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(400),
-            nn.Linear(400, 200), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(200),
-            nn.Linear(200, 100), nn.LeakyReLU(), nn.Dropout(p=0.1), # nn.BatchNorm1d(100),
-            nn.Linear(100, 1),
+            nn.Linear(64*13+1, 100), nn.LeakyReLU(), # nn.Dropout(p=0.1), nn.BatchNorm1d(800),
+            nn.Linear(100, 50), nn.LeakyReLU(), # nn.Dropout(p=0.1), nn.BatchNorm1d(100),
+            nn.Linear(50, 1),
             nn.Sigmoid(),
         )
 
@@ -306,9 +304,11 @@ def load_data_from_numpy(start):
             evals = np.concatenate((evals, new_evals), axis=0)
         return (boards, evals)
 
-def train(log_interval, model, device, train_loader, optimizer, epoch):
+def train(log_interval, model, device, train_loader, optimizer, epoch, reverse=False):
     model.train()
     average_loss = 0
+    loss_len = 0
+    losses = []
     last_time = time.time()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -317,18 +317,28 @@ def train(log_interval, model, device, train_loader, optimizer, epoch):
         #loss_fn = nn.CrossEntropyLoss()
         loss_fn = nn.MSELoss()
         loss = loss_fn(output, target)
+        #print(list(zip(output.tolist(), target.tolist())))
+        losses.append(loss.item())
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        if(reverse):
+            for p in model.parameters():
+                p.grad *= -1
+        #torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+        #print(optimizer)
         optimizer.step()
-        average_loss += loss.item() / log_interval
-        if batch_idx % log_interval == 0:
-            current_time = time.time()
-            elapsed_time = current_time - last_time
-            last_time = current_time
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.2f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), average_loss, elapsed_time))
-            average_loss = 0
+        average_loss += loss.item()
+        loss_len += 1
+    #if batch_idx % log_interval == 0:
+    average_loss /= loss_len
+    current_time = time.time()
+    elapsed_time = current_time - last_time
+    last_time = current_time
+    #print(losses)
+    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.2f}'.format(
+        epoch, batch_idx * len(data), len(train_loader.dataset),
+        100. * batch_idx / len(train_loader), average_loss, elapsed_time))
+    average_loss = 0
+    loss_len = 0
 
 
 def test(model, device, test_loader):
@@ -419,11 +429,11 @@ def train_model():
     
     epoch = 0
 
-    #model = Model().to(device)
-    model = torch.jit.load("stockfish_model.pt").to(device)
-    model.eval()            
+    model = ModelSmall().to(device)
+    #model = torch.jit.load("stockfish_model_small.pt").to(device)
+    #model.eval()            
     #model.forward = model2.forward
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.00000001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     with open("current_dataset.txt", "r") as f:
         current_dataset = int(f.read())
 
@@ -452,7 +462,7 @@ def train_model():
         test_loss += test(model, device, test_loader) 
 
         #torch.save(model, "stockfish_model.pt")
-        torch.jit.script(model).save("stockfish_model.pt")
+        torch.jit.script(model).save("stockfish_model_small.pt")
 
         current_dataset += 1
         if(current_dataset >= 20):
@@ -479,9 +489,10 @@ def train_model():
 def load_model():
     global model_global
     #model_global = tf.keras.models.load_model('stockfish_model2.keras')
-    model_global = torch.jit.load("stockfish_model.pt").to(device)
+    model_global = torch.jit.load("stockfish_model_small.pt").to(device)
     model_global.eval()
 
+@torch.no_grad()
 def use_model(input_board):
     global model_global
     return model_global(torch.Tensor(np.array([input_board])).to(device))
