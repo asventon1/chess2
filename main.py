@@ -8,8 +8,10 @@ import ai
 import numpy as np
 import torch
 from player import *
+import cpp_part as cpp
 
 app = Flask(__name__)
+#board = chess.Board("3q2rk/p4p2/4p2p/3P2p1/1P2B3/5P1P/4K2r/3R4 w - - 14 40")
 board = chess.Board()
 currentSquare = chess.A1
 moves = []
@@ -44,7 +46,7 @@ def outcomeRoute():
     
 
 
-depth = 3
+depth = 4
 @app.route('/board.svg/<xPos>/<yPos>/<bs>')
 def boardRoute(xPos, yPos, bs):
     global board
@@ -61,9 +63,8 @@ def boardRoute(xPos, yPos, bs):
         #(best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
         time2 = time.time()
         #print("old version {}".format(time2-time1))
-        depth = 4
-        (best_score, best_move) = pick_move_minimax(board, depth, -10000000, 10000000, -1)
-        #best_move = pick_move_first(board)
+        best_move_str = cpp.minimax(board.fen(), depth)
+        best_move = chess.Move.from_uci(best_move_str.strip())
         time3 = time.time()
         print("new version {}".format(time3-time2))
         if(time3-time2 > 3):
@@ -72,6 +73,7 @@ def boardRoute(xPos, yPos, bs):
             depth += 1
         if(best_move != None):
             board.push(best_move)
+        print(board.fen())
     else:
         moves = [x.to_square for x in board.legal_moves if x.from_square == square]
     currentSquare = square

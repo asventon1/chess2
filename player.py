@@ -147,7 +147,9 @@ def pick_move_minimax(board, depth, alpha, beta, color):
             return (-1, None)
     if(len(list(board.legal_moves)) == 0 or depth == 0):
         board_array = ai.board_array_from_fen(board.fen())
-        return (color * ai.use_model(board_array), None)
+        model_out = ai.use_model(board_array)
+        print(model_out)
+        return (color * model_out, None)
         #return (1, None)
     best_score = -1000000
     best_move = None

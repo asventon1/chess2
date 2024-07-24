@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /bin/sh
 for value in {0..40}
 do
   echo '[' > 'data/data'$value'.json'

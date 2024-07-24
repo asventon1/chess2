@@ -495,7 +495,8 @@ def load_model():
 @torch.no_grad()
 def use_model(input_board):
     global model_global
-    return model_global(torch.Tensor(np.array([input_board])).to(device))
+    with torch.no_grad():
+        return model_global(torch.Tensor(np.array([input_board])).to(device))
 
 
 if __name__ == "__main__":

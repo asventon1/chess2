@@ -1,15 +1,16 @@
 #include <torch/torch.h>
 #include <torch/script.h>
-#include "main.h"
-#include "chess.hpp"
+#include "../include/main.h"
+#include "../chess-library/include/chess.hpp"
 #include <string>
+#include <sstream>
 
 using namespace chess;
 
 std::vector<std::string> get_words(std::string s){
     std::vector<std::string> res;
     int pos = 0;
-    while(pos < s.size()){
+    for(int i = 0; i < 2; i++){
         pos = s.find(" ");
         res.push_back(s.substr(0,pos));
         s.erase(0,pos+1);
@@ -17,12 +18,12 @@ std::vector<std::string> get_words(std::string s){
     return res;
 }
 
-std::array<char, 64*13+1> board_array_from_fen(std::string fen_input) {
-  std::array<char, 64*13+1> current_board;
+std::array<float, 64*13+1> board_array_from_fen(std::string fen_input) {
+  std::array<float, 64*13+1> current_board;
   for(unsigned int i = 0; i < 64; i++) {
     current_board[i*13] = 1;
     for(unsigned int j = 0; j < 12; j++){
-      current_board[i*12+j+1] = 0;
+      current_board[i*13+j+1] = 0;
     }
   }
   std::vector<std::string> whole_fen = get_words(fen_input);
@@ -33,7 +34,7 @@ std::array<char, 64*13+1> board_array_from_fen(std::string fen_input) {
   for(unsigned int i = 0; i < fen.length(); i++) {
     char c = fen[i];
     if(c == '/') {
-    } else if(isalpha('w')) {
+    } else if(isalpha(c)) {
       current_board[square*13+0] = 0;
       if(c == 'p') { current_board[square*13+1] = 1; }
       else if(c == 'n') { current_board[square*13+2] = 1; }
@@ -91,41 +92,59 @@ fn board_array_from_fen(fen_input: &str) -> Vec<u8> {
 }
 */
 
-double get_board_value(Board board) {
-  auto model = torch::jit::load("/home/adam/stuff/python/chess2/stockfish_model_small.pt");
-  //model.eval();
-  auto options = torch::TensorOptions().dtype(torch::kFloat64).device(torch::kCUDA, 1);
-  std::array<char, 833> array_data = board_array_from_fen(board.getFen());
+torch::jit::script::Module model;
+torch::Device device("cpu:0");
 
-  //torch::Tensor prediction = model.forward(torch::from_blob(my_input, {833}, options));
-  //std::cout << prediction << std::endl;
-  return 1;
+float get_board_value(Board board) {
+  torch::NoGradGuard no_grad;
+  auto options = torch::TensorOptions().dtype(torch::kFloat32);
+  std::array<float, 833> array_data = board_array_from_fen(board.getFen());
+  torch::Tensor tensor_data = torch::from_blob(array_data.data(), {833}, options);
+  tensor_data = tensor_data.to(device);
+  std::vector<torch::jit::IValue> input_data = {tensor_data};
+  auto prediction = model.forward(input_data);
+  float pred_float = prediction.toTensor().item<float>();
+  //std::cout << pred_float << std::endl;
+  return pred_float;
+  //return 1;
 }
 
-std::pair<int, std::optional<Move>> minimax_internal(Board board, int depth, double alpha, double beta, int color) {
+std::pair<float, std::optional<Move>> minimax_internal(Board board, int depth, double alpha, double beta, int color) {
+  std::optional<Move> best_move = std::nullopt;
+  Movelist moves;
+  movegen::legalmoves(moves, board);
+  if(moves.empty()){
+    if(board.inCheck()){
+      if(board.sideToMove() == Color::WHITE) return std::make_pair(-1000, std::nullopt);
+      else return std::make_pair(1000, std::nullopt);
+    } else {
+      return std::make_pair(0.5, std::nullopt);
+    }
+  }
+  if(board.isInsufficientMaterial() || board.isHalfMoveDraw() || board.isRepetition(3)){
+      return std::make_pair(0.5, std::nullopt);
+  }
+/*
   GameResult outcome = board.isGameOver().second;
   switch(outcome) {
     case GameResult::NONE:
       break;
     case GameResult::WIN:
     case GameResult::LOSE:
-      if(board.sideToMove() == Color::WHITE) return std::make_pair(1000, std::nullopt);
-      else return std::make_pair(-1000, std::nullopt);
-      break;
     case GameResult::DRAW:
-      return std::make_pair(-1, std::nullopt);
+      std::cout << "test" << std::endl;
+      return std::make_pair(100, std::nullopt);
   }
+  */
   if(depth == 0) {
+    float output = color * get_board_value(board);
     return std::make_pair(color*get_board_value(board), std::nullopt);
   }
-  int best_score = -10000000;
-  std::optional<Move> best_move = std::nullopt;
-  Movelist moves;
-  movegen::legalmoves(moves, board);
+  float best_score = -10000000;
   for(const auto &m : moves) {
     board.makeMove(m);
-    std::pair<int, std::optional<Move>> minimax_result = minimax_internal(board, depth-1, -beta, -alpha, -color);
-    int score = minimax_result.first;
+    std::pair<float, std::optional<Move>> minimax_result = minimax_internal(board, depth-1, -beta, -alpha, -color);
+    float score = minimax_result.first;
     std::optional<Move> move = minimax_result.second;
     score = -score;
     if(score > best_score) { 
@@ -136,20 +155,34 @@ std::pair<int, std::optional<Move>> minimax_internal(Board board, int depth, dou
       alpha = best_score;
     }
     board.unmakeMove(m);
-    if(alpha > beta) {
+    if(alpha >= beta) {
       break;
     }
   }
   return std::make_pair(best_score, best_move);
 }
 
-std::string minimax(const std::string &fen){
-  Board board = Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+std::string minimax(const std::string &fen, unsigned int depth){
 
-  std::pair<int, std::optional<Move>> minimax_result = minimax_internal(board, 2, -100000000, 100000000, -1);
+  model = torch::jit::load("/home/adam/stuff/python/chess2/stockfish_model_small.pt");
+  model.eval();
+  //device = torch::Device("cpu:0");
+  model.to(device);
+  Board board = Board(fen);
+  int color = board.sideToMove() == Color::WHITE ? 1 : -1;
+
+  std::pair<int, std::optional<Move>> minimax_result = minimax_internal(board, depth, -100000000, 100000000, color);
   int best_score = minimax_result.first;
   Move best_move = minimax_result.second.value();
-  std::cout << best_move << std::endl;
 
-  return fen + " world";
+  std::stringstream buffer;
+  buffer << best_move << std::endl;
+  std::string output = buffer.str();
+  std::cout << output << std::endl;
+
+  return output;
+}
+
+int main() {
+  minimax("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 4);
 }

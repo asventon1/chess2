@@ -1,4 +1,4 @@
-env
+chess2env
 data
 __pycache__
 rust/target
@@ -6,8 +6,15 @@ rust/target
 *.json
 *.jsonl
 *.keras
-cpp/build
-cpp/cpp_part.cpython-312-x86_64-linux-gnu.so
-cpp/cpp_part.egg-info
 cpp/chess-library
 cpp/torch_test/build
+cpp/CMakeCache.txt
+cpp/cpp_part.cpython-312-x86_64-linux-gnu.so
+cpp_part.cpython-312-x86_64-linux-gnu.so
+cpp/CMakeFiles
+cpp/cmake_install.cmake
+cpp/detect_cuda_compute_capabilities.cu
+cpp/detect_cuda_version.cc
+cpp/Makefile
+cpp/perf.data
+cpp/perf.data.old
