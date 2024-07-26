@@ -291,7 +291,7 @@ def save_data_as_numpy():
     #board_fen = fen_from_board_array(boards[2])
 
 def load_data_from_numpy(start):
-    with open('rust/array2.npy', 'rb') as of:
+    with open('rust/array_fixed_mates.npy', 'rb') as of:
         for i in range(start):
             new_boards = np.load(of)
             new_evals = np.load(of)
@@ -357,7 +357,7 @@ def test(model, device, test_loader):
 
     test_loss /= len(test_loader.dataset)
 
-    print('\nTest set: Average loss: {:.4f}\n'.format(
+    print('\nTest set: Average loss: {:.8f}\n'.format(
         test_loss))
     return test_loss
 
@@ -429,11 +429,11 @@ def train_model():
     
     epoch = 0
 
-    model = ModelSmall().to(device)
-    #model = torch.jit.load("stockfish_model_small.pt").to(device)
-    #model.eval()            
+    #model = ModelSmall().to(device)
+    model = torch.jit.load("stockfish_model_small.pt").to(device)
+    model.train()            
     #model.forward = model2.forward
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.000001)
     with open("current_dataset.txt", "r") as f:
         current_dataset = int(f.read())
 

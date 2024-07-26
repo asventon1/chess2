@@ -64,14 +64,23 @@ fn board_array_from_json(j_input: Value, data_type: DataType) -> (Vec<u8>, Vec<f
         };
         match data_type { 
             DataType::Evals => {
-                let current_eval = if eval.contains_key("cp") {
+                let current_eval = if eval.contains_key("mate") {
+                    let eval_mate = match &eval["mate"] {
+                        Value::Number(eval_mate) => { eval_mate.as_f64().expect("invalid json input") },
+                        _ => panic!("invalid json input, 3"),
+                    };
+                    let eval_cp = if eval_mate > 0.0 {
+                        15000.0+10000.0/eval_mate
+                    } else {
+                        -15000.0+10000.0/eval_mate
+                    };
+                    adjusted_sigmoid(eval_cp)
+                } else {
                     let eval_cp = match &eval["cp"] {
                         Value::Number(eval_cp) => { eval_cp },
                         _ => panic!("invalid json input, 3"),
                     };
                     adjusted_sigmoid(eval_cp.as_f64().expect("invalid json input, 3"))
-                } else {
-                    continue
                 };
                 eval_array.push(current_eval);
             } 
@@ -104,7 +113,7 @@ fn board_array_from_json(j_input: Value, data_type: DataType) -> (Vec<u8>, Vec<f
 
 fn make_eval_dataset(data_type: DataType) -> std::io::Result<()>{
     //println!("{}", array![[1,2,3]; 5]);
-    let mut file = fs::File::create("array.npy")?;
+    let mut file = fs::File::create("array_fixed_mates.npy")?;
     for data_file_index in 0..41 {
         println!("Current file {}", data_file_index);
         let contents = fs::read_to_string(format!("../data/data{}.json", data_file_index))

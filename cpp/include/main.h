@@ -1,6 +1,6 @@
 #include <pybind11/pybind11.h>
 
-std::string minimax(const std::string &fen, unsigned int depth);
+std::string minimax(const std::string &fen, const std::string &move, unsigned int depth, float extra_depth_i);
 
 namespace py = pybind11;
 
